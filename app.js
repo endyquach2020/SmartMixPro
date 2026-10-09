@@ -1605,8 +1605,38 @@ async function downloadAllZip() {
 }
 
 // ==========================================================================
-// GOOGLE IDENTITY & AUTHENTICATION MODULE
+// GOOGLE IDENTITY & FIREBASE AUTHENTICATION MODULE
 // ==========================================================================
+
+// Cấu hình Firebase chính thức từ dự án: smartmixpro-826d3
+const firebaseConfig = {
+  apiKey: "AIzaSyCP3y20KYZkHlxmxKKQcT9iN80RNIqBJtc",
+  authDomain: "smartmixpro-826d3.firebaseapp.com",
+  projectId: "smartmixpro-826d3",
+  storageBucket: "smartmixpro-826d3.firebasestorage.app",
+  messagingSenderId: "690523947328",
+  appId: "1:690523947328:web:f29922615a353564effaa5",
+  measurementId: "G-5CGR159L35"
+};
+
+let firebaseAuth = null;
+let googleAuthProvider = null;
+
+try {
+  if (window.firebase) {
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    firebaseAuth = firebase.auth();
+    googleAuthProvider = new firebase.auth.GoogleAuthProvider();
+    // Luôn hiển thị hộp thoại chọn tài khoản Google nếu có nhiều tài khoản
+    googleAuthProvider.setCustomParameters({
+      prompt: 'select_account'
+    });
+  }
+} catch (e) {
+  console.warn("Khởi tạo Firebase thất bại:", e);
+}
 
 function initGoogleAuth() {
   const btnGoogleLogin = document.getElementById('btnGoogleLogin');
@@ -1619,12 +1649,6 @@ function initGoogleAuth() {
   const menuUserName = document.getElementById('menuUserName');
   const menuUserEmail = document.getElementById('menuUserEmail');
   const btnGoogleLogout = document.getElementById('btnGoogleLogout');
-  
-  const googleAuthModal = document.getElementById('googleAuthModal');
-  const btnCloseAuthModal = document.getElementById('btnCloseAuthModal');
-  const btnConfirmQuickLogin = document.getElementById('btnConfirmQuickLogin');
-  const inputDemoName = document.getElementById('inputDemoName');
-  const inputDemoEmail = document.getElementById('inputDemoEmail');
 
   const authToast = document.getElementById('authToast');
   const authToastMsg = document.getElementById('authToastMsg');
@@ -1637,7 +1661,7 @@ function initGoogleAuth() {
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
       authToast.classList.add('hidden');
-    }, 3500);
+    }, 4000);
   }
 
   function generateAvatarDataUrl(name) {
@@ -1651,12 +1675,15 @@ function initGoogleAuth() {
       if (btnGoogleLogin) btnGoogleLogin.classList.add('hidden');
       if (userProfileBox) userProfileBox.classList.remove('hidden');
 
-      const avatarSrc = user.picture || generateAvatarDataUrl(user.name);
+      const avatarSrc = user.photoURL || user.picture || generateAvatarDataUrl(user.displayName || user.name);
+      const name = user.displayName || user.name || 'Người dùng';
+      const email = user.email || '';
+
       if (userAvatarImg) userAvatarImg.src = avatarSrc;
       if (menuAvatarImg) menuAvatarImg.src = avatarSrc;
-      if (userNameLabel) userNameLabel.textContent = user.name || 'Người dùng';
-      if (menuUserName) menuUserName.textContent = user.name || 'Người dùng';
-      if (menuUserEmail) menuUserEmail.textContent = user.email || '';
+      if (userNameLabel) userNameLabel.textContent = name;
+      if (menuUserName) menuUserName.textContent = name;
+      if (menuUserEmail) menuUserEmail.textContent = email;
     } else {
       if (btnGoogleLogin) btnGoogleLogin.classList.remove('hidden');
       if (userProfileBox) userProfileBox.classList.add('hidden');
@@ -1664,50 +1691,50 @@ function initGoogleAuth() {
     }
   }
 
-  function openAuthModal() {
-    if (!googleAuthModal) return;
-    googleAuthModal.classList.remove('hidden');
-  }
-
-  function closeAuthModal() {
-    if (!googleAuthModal) return;
-    googleAuthModal.classList.add('hidden');
-  }
-
-  function loginUser(userData) {
-    localStorage.setItem('smartmix_user', JSON.stringify(userData));
-    renderUserUI(userData);
-    closeAuthModal();
-    showToast(`Chào mừng ${userData.name}, bạn đã đăng nhập thành công!`);
-  }
-
-  function logoutUser() {
-    localStorage.removeItem('smartmix_user');
-    renderUserUI(null);
-    showToast('Đã đăng xuất khỏi tài khoản.');
-  }
-
-  // Gán sự kiện
+  // Khi click nút "Đăng nhập với Google" -> Bật trực tiếp popup Google chính hãng
   if (btnGoogleLogin) {
-    btnGoogleLogin.addEventListener('click', openAuthModal);
-  }
-
-  if (btnCloseAuthModal) {
-    btnCloseAuthModal.addEventListener('click', closeAuthModal);
-  }
-
-  if (googleAuthModal) {
-    googleAuthModal.addEventListener('click', (e) => {
-      if (e.target === googleAuthModal) closeAuthModal();
+    btnGoogleLogin.addEventListener('click', () => {
+      if (!firebaseAuth || !googleAuthProvider) {
+        showToast("Đang kết nối dịch vụ Google... Vui lòng thử lại sau giây lát.");
+        return;
+      }
+      firebaseAuth.signInWithPopup(googleAuthProvider)
+        .then((result) => {
+          const user = result.user;
+          showToast(`Chào mừng ${user.displayName || 'bạn'}, bạn đã đăng nhập thành công!`);
+        })
+        .catch((error) => {
+          console.error("Lỗi đăng nhập Google:", error);
+          if (error.code === 'auth/popup-closed-by-user') {
+            return;
+          }
+          if (error.code === 'auth/operation-not-allowed' || error.code === 'auth/configuration-not-found') {
+            alert("Lưu ý: Bạn cần vào Firebase Console > Authentication > Sign-in method và BẬT (Enable) phương thức Google nhé!");
+          } else {
+            showToast("Lỗi đăng nhập: " + (error.message || error.code));
+          }
+        });
     });
   }
 
+  // Đăng xuất khỏi tài khoản Google
+  if (btnGoogleLogout) {
+    btnGoogleLogout.addEventListener('click', () => {
+      if (firebaseAuth) {
+        firebaseAuth.signOut().then(() => {
+          showToast("Đã đăng xuất khỏi tài khoản.");
+        });
+      } else {
+        renderUserUI(null);
+      }
+    });
+  }
+
+  // Mở/Đóng menu hồ sơ người dùng
   if (userProfileBtn) {
     userProfileBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (userMenuDropdown) {
-        userMenuDropdown.classList.toggle('hidden');
-      }
+      if (userMenuDropdown) userMenuDropdown.classList.toggle('hidden');
     });
   }
 
@@ -1717,34 +1744,20 @@ function initGoogleAuth() {
     }
   });
 
-  if (btnGoogleLogout) {
-    btnGoogleLogout.addEventListener('click', logoutUser);
-  }
-
-  if (btnConfirmQuickLogin) {
-    btnConfirmQuickLogin.addEventListener('click', () => {
-      const name = (inputDemoName && inputDemoName.value.trim()) || 'Quách Nhị';
-      const email = (inputDemoEmail && inputDemoEmail.value.trim()) || 'nhicnttcantho@gmail.com';
-      loginUser({
-        name: name,
-        email: email,
-        picture: generateAvatarDataUrl(name),
-        provider: 'google'
-      });
+  // Tự động lắng nghe phiên đăng nhập từ Firebase (không bao giờ bị mất đăng nhập khi F5)
+  if (firebaseAuth) {
+    firebaseAuth.onAuthStateChanged((user) => {
+      if (user) {
+        renderUserUI({
+          displayName: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+          uid: user.uid
+        });
+      } else {
+        renderUserUI(null);
+      }
     });
-  }
-
-  // Tải trạng thái đăng nhập từ localStorage khi mở trang
-  try {
-    const savedUserJson = localStorage.getItem('smartmix_user');
-    if (savedUserJson) {
-      const savedUser = JSON.parse(savedUserJson);
-      renderUserUI(savedUser);
-    } else {
-      renderUserUI(null);
-    }
-  } catch (err) {
-    renderUserUI(null);
   }
 }
 
