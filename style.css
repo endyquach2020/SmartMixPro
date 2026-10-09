@@ -1,0 +1,111 @@
+/* ==========================================================================
+   SMARTMIX PRO - GILMER SYSTEM TYPOGRAPHY & SIZE STYLING (CTU PORTAL STYLE)
+   ========================================================================== */
+
+@font-face {
+  font-family: 'Gilmer';
+  font-style: normal;
+  font-weight: 400;
+  src: url('fonts/gilmer-regular.woff2') format('woff2');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Gilmer';
+  font-style: normal;
+  font-weight: 500;
+  src: url('fonts/gilmer-medium.woff2') format('woff2');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Gilmer';
+  font-style: normal;
+  font-weight: 700;
+  src: url('fonts/gilmer-bold.woff2') format('woff2');
+  font-display: swap;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: 'Gilmer', 'Montserrat', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #1f2937;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+input, button, select, textarea {
+  font-family: 'Gilmer', 'Montserrat', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* DropZone Effects */
+#dropZone {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+#dropZone:hover, #dropZone.drag-over {
+  background-color: #eff6ff;
+  border-color: #3b82f6;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -2px rgba(59, 130, 246, 0.12);
+}
+
+/* Variant Card & Button Hover */
+.variant-card {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.variant-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px -4px rgba(15, 23, 42, 0.08);
+}
+
+/* Pulse animation for Live status badge */
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+}
+
+.pulse-dot {
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+/* Tab button transition */
+.tab-btn {
+  transition: all 0.18s ease-in-out;
+}
+
+/* Input micro transitions */
+input[type="text"], input[type="number"] {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}

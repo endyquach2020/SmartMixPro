@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartMix Pro - Trộn Đề Thi Word &amp; Ma Trận Excel</title>
+  
+  <!-- Fonts: Montserrat & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="style.css">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</head>
+<body class="bg-gradient-to-br from-slate-50 via-slate-100 to-indigo-50/30 text-slate-800 min-h-screen antialiased selection:bg-blue-600 selection:text-white flex flex-col justify-between">
+  
+  <!-- Header Navbar Hiện Đại -->
+  <header class="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white shadow-lg shadow-blue-900/10 border-b border-white/10 sticky top-0 z-40 backdrop-blur-md">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3.5 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-xl bg-white/15 border border-white/20 flex items-center justify-center shadow-inner">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+          </svg>
+        </div>
+        <div class="flex items-center space-x-2">
+          <h1 class="text-lg font-extrabold tracking-tight">SmartMix Pro</h1>
+          <span class="text-[12px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-blue-500/30 border border-blue-400/30 text-blue-100">v2.5</span>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <div class="flex items-center space-x-1.5 bg-black/20 border border-white/10 px-3 py-1.5 rounded-full text-xs font-medium text-blue-100 shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
+          <span class="font-mono text-[13px]">Chuẩn BGD 2026</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-5 space-y-4">
+    
+    <!-- Thanh Tab Phân Đoạn (Segmented Tabs) Gọn Gàng -->
+    <div class="flex items-center justify-between">
+      <div class="bg-slate-200/70 p-1 rounded-xl inline-flex space-x-1 border border-slate-300/60 shadow-inner">
+        <button type="button" id="tabMixBtn" class="tab-btn active flex items-center space-x-2 py-2 px-4 rounded-lg font-semibold text-xs sm:text-sm bg-white text-blue-700 shadow-sm border border-slate-200/60 transition">
+          <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          <span>Trộn đề thi</span>
+        </button>
+
+        <button type="button" id="tabGuideBtn" class="tab-btn inactive flex items-center space-x-2 py-2 px-4 rounded-lg font-medium text-xs sm:text-sm text-slate-600 hover:text-slate-900 hover:bg-white/60 transition">
+          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+          </svg>
+          <span>Quy tắc soạn đề</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB 1: KHU VỰC TRỘN ĐỀ -->
+    <div id="tabMixContent" class="space-y-4">
+      
+      <!-- KHUNG 1: THÔNG TIN CHUNG (DÀN NGANG GỌN GÀNG) -->
+      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden transition hover:shadow-md">
+        <!-- Header Khung Thông Tin -->
+        <div class="bg-slate-50/80 px-4 py-2.5 border-b border-slate-200/70 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center space-x-2">
+            <span class="w-5 h-5 rounded-md bg-teal-600/10 text-teal-700 flex items-center justify-center font-bold text-xs">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path></svg>
+            </span>
+            <span class="text-xs font-bold text-slate-800 tracking-tight">Thông tin chung (Tiêu đề đề thi)</span>
+          </div>
+
+          <label class="flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer select-none bg-white px-2.5 py-1 rounded-md border border-slate-200 hover:border-blue-400 transition shadow-2xs">
+            <input type="checkbox" id="chkUseCustomHeader" checked class="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-500 accent-blue-600">
+            <span>Áp dụng tiêu đề chuẩn</span>
+          </label>
+        </div>
+
+        <!-- 6 Ô Input Được Bố Trí Thành 2 Dòng Rộng Rãi, Sang Trọng -->
+        <div class="p-4 sm:p-4.5 bg-white space-y-3">
+          <!-- DÒNG 1: ĐƠN VỊ & KÌ THI (3 CỘT) -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center space-x-1.5">
+                <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                <span>Sở / Phòng GD</span>
+              </label>
+              <input type="text" id="infoDepartment" value="SỞ GD&ĐT TP CẦN THƠ" placeholder="VD: SỞ GD&ĐT TP CẦN THƠ" class="w-full text-xs sm:text-sm h-9 px-3 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 rounded-lg text-slate-800 font-semibold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition shadow-2xs">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center space-x-1.5">
+                <svg class="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222"></path></svg>
+                <span>Trường</span>
+              </label>
+              <input type="text" id="infoSchool" value="TRƯỜNG TIỂU HỌC, THCS VÀ THPT QUỐC TẾ HÒA BÌNH" placeholder="VD: TRƯỜNG TIỂU HỌC, THCS VÀ THPT QUỐC TẾ HÒA BÌNH" class="w-full text-xs sm:text-sm h-9 px-3 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 rounded-lg text-slate-800 font-semibold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition shadow-2xs">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center space-x-1.5">
+                <svg class="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                <span>Kì kiểm tra</span>
+              </label>
+              <input type="text" id="infoExamName" value="KIỂM TRA GIỮA KỲ I" placeholder="VD: KIỂM TRA GIỮA KỲ I" class="w-full text-xs sm:text-sm h-9 px-3 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 rounded-lg text-slate-800 font-semibold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition shadow-2xs">
+            </div>
+          </div>
+
+          <!-- DÒNG 2: NĂM HỌC, MÔN HỌC & THỜI GIAN (3 CỘT) -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-0.5">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center space-x-1.5">
+                <svg class="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                <span>Năm học</span>
+              </label>
+              <input type="text" id="infoSchoolYear" value="NĂM HỌC 2026 – 2027" placeholder="VD: NĂM HỌC 2026 – 2027" class="w-full text-xs sm:text-sm h-9 px-3 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 rounded-lg text-slate-800 font-semibold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition shadow-2xs">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center space-x-1.5">
+                <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                <span>Môn học</span>
+              </label>
+              <input type="text" id="infoSubject" value="TOÁN" placeholder="VD: TOÁN" class="w-full text-xs sm:text-sm h-9 px-3 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 rounded-lg text-slate-800 font-semibold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition shadow-2xs">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center space-x-1.5">
+                <svg class="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>Thời gian làm bài</span>
+              </label>
+              <input type="text" id="infoDuration" value="50 phút" placeholder="VD: 50 phút" class="w-full text-xs sm:text-sm h-9 px-3 bg-slate-50/70 hover:bg-white focus:bg-white border border-slate-200 rounded-lg text-slate-800 font-semibold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition shadow-2xs">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KHUNG 2: CHỌN FILE ĐỀ VÀ THIẾT LẬP TRỘN -->
+      <div class="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-4.5 shadow-sm space-y-3">
+        
+        <!-- Dropzone tải file nhỏ gọn, đơn giản -->
+        <div id="dropZone" class="border border-dashed border-slate-300 hover:border-blue-500 rounded-xl py-3 px-4 text-center transition bg-slate-50/60 hover:bg-blue-50/30 flex items-center justify-center cursor-pointer group min-h-[48px]">
+          <input type="file" id="fileInput" accept=".docx" class="hidden">
+          
+          <div id="fileNameLabel" class="flex items-center justify-center space-x-2 text-xs sm:text-sm font-medium text-slate-600 pointer-events-none">
+            <span class="w-6 h-6 rounded-md bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+              </svg>
+            </span>
+            <span>Kéo thả file đề thi (.docx) vào đây hoặc <span class="text-blue-600 font-bold underline decoration-blue-300 group-hover:text-blue-700">chọn từ thiết bị</span></span>
+          </div>
+        </div>
+
+        <!-- Cấu hình số lượng mã đề & Nút thực hiện (Bố cục dàn ngang) -->
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1 items-end">
+          <div class="sm:col-span-3">
+            <label class="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
+              <span>Số lượng mã đề</span>
+              <span class="text-[12px] text-slate-400 font-normal">Tối đa 24</span>
+            </label>
+            <div class="relative">
+              <input type="number" id="numVariants" value="4" min="1" max="24" class="w-full text-xs h-10 px-3 pr-8 bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
+              <span class="absolute right-2.5 top-2.5 text-xs text-slate-400 pointer-events-none font-semibold">đề</span>
+            </div>
+          </div>
+
+          <div class="sm:col-span-3">
+            <label class="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
+              <span>Mã đề bắt đầu</span>
+              <span class="text-[12px] text-slate-400 font-normal">101, 102...</span>
+            </label>
+            <input type="text" id="startCode" value="101" class="w-full text-xs h-10 px-3 bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
+          </div>
+
+          <div class="sm:col-span-6">
+            <button id="btnProcess" disabled class="w-full h-10 bg-slate-200 text-slate-400 cursor-not-allowed font-bold rounded-lg text-xs sm:text-sm shadow-sm transition-all duration-200 flex items-center justify-center space-x-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+              </svg>
+              <span>Tiến hành phân tích &amp; tạo đề</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- KHUNG 3: KẾT QUẢ XỬ LÝ (Ẩn ban đầu) -->
+      <div id="resultCard" class="hidden bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200/70 pb-3">
+          <div class="flex items-center space-x-2.5">
+            <span class="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+            </span>
+            <div>
+              <h2 class="text-sm font-bold text-slate-800">Kết quả trộn đề thi thành công</h2>
+              <p class="text-[13px] text-slate-500" id="statsInfo">Đã tạo đề gốc mã 000, các mã đề hoán vị và file Excel đáp án</p>
+            </div>
+          </div>
+          
+          <button id="btnDownloadAll" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-md shadow-emerald-600/20 hover:shadow-lg transition flex items-center space-x-2 active:scale-95">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            <span>Tải trọn bộ đề + Excel (.ZIP)</span>
+          </button>
+        </div>
+
+        <!-- Danh sách các mã đề & Excel -->
+        <div id="variantList" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2.5"></div>
+      </div>
+    </div>
+
+    <!-- TAB 2: QUY TẮC CẤU HÌNH ĐỀ GỐC -->
+    <div id="tabGuideContent" class="hidden bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-7 shadow-sm space-y-6 text-sm sm:text-base">
+      <div>
+        <h2 class="text-lg sm:text-xl font-extrabold text-slate-800 mb-1.5">Cấu hình các nhóm trong đề thi</h2>
+        <p class="text-sm sm:text-base text-slate-500">Đặt các mã nhóm ở đầu mỗi phần để hệ thống tự động nhận diện và áp dụng thuật toán hoán vị chính xác.</p>
+      </div>
+
+      <!-- Bảng cấu hình theo ảnh chuẩn -->
+      <div class="overflow-x-auto border border-slate-200 rounded-xl shadow-2xs">
+        <table class="w-full text-left text-sm sm:text-base">
+          <thead class="bg-slate-50 text-slate-700 border-b border-slate-200 text-sm sm:text-base">
+            <tr>
+              <th class="py-3 px-4 font-bold w-24">Mã nhóm</th>
+              <th class="py-3 px-4 font-bold w-64">Phần thi &amp; Quy tắc hoán vị</th>
+              <th class="py-3 px-4 font-bold">Quy cách đáp án &amp; Xuất kết quả</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-sm sm:text-base">
+            <tr class="hover:bg-slate-50/60 bg-emerald-50/20">
+              <td class="py-3 px-4 font-mono font-bold text-emerald-700">&lt;#g1&gt;</td>
+              <td class="py-3 px-4 font-medium text-slate-800">
+                <b class="text-slate-900">Phần I. Trắc nghiệm nhiều lựa chọn</b><br>
+                <span class="text-xs sm:text-sm text-slate-500">Hoán vị cả câu hỏi và các đáp án</span>
+              </td>
+              <td class="py-3 px-4 text-slate-600">
+                Bắt đầu bằng A., B., C., D. <u>Gạch chân</u> phương án đúng. Tự động dàn đều 4 hoặc 2 cột.
+              </td>
+            </tr>
+            <tr class="hover:bg-slate-50/60 bg-amber-50/20">
+              <td class="py-3 px-4 font-mono font-bold text-amber-700">&lt;#g2&gt;</td>
+              <td class="py-3 px-4 font-medium text-slate-800">
+                <b class="text-slate-900">Phần II. Trắc nghiệm đúng sai</b><br>
+                <span class="text-xs sm:text-sm text-slate-500">Chỉ hoán vị các đáp án/ý con a, b, c, d</span>
+              </td>
+              <td class="py-3 px-4 text-slate-600">
+                Các ý bắt đầu bằng a), b), c), d). Ý đúng thì <u>gạch chân</u> (máy ghi <b>Đ</b>), không gạch chân là <b>S</b>.
+              </td>
+            </tr>
+            <tr class="hover:bg-slate-50/60 bg-blue-50/20">
+              <td class="py-3 px-4 font-mono font-bold text-blue-700">&lt;#g3&gt;</td>
+              <td class="py-3 px-4 font-medium text-slate-800">
+                <b class="text-slate-900">Phần III. Câu hỏi trả lời ngắn</b><br>
+                <span class="text-xs sm:text-sm text-slate-500">Chỉ hoán vị các câu hỏi</span>
+              </td>
+              <td class="py-3 px-4 text-slate-600">
+                Đáp án bắt đầu bằng chữ <b>A.</b> (Ví dụ: <code class="font-bold text-red-600">A. 19.</code> hoặc <u><code class="font-bold text-red-600">A.19.</code></u>). Hệ thống tự đọc hết các ký tự bên phải làm đáp án Excel và tự ẩn dòng này trong đề học sinh.
+              </td>
+            </tr>
+            <tr class="hover:bg-slate-50/60">
+              <td class="py-3 px-4 font-mono font-bold text-purple-700">&lt;#g4&gt;</td>
+              <td class="py-3 px-4 font-medium text-slate-800">
+                <b class="text-slate-900">Nhóm câu hỏi không cần trộn</b><br>
+                <span class="text-xs sm:text-sm text-slate-500">Cố định 100% (Tự luận, bài Nghe...)</span>
+              </td>
+              <td class="py-3 px-4 text-slate-600">
+                Giữ nguyên vị trí câu và nội dung, hoàn toàn không đưa vào bảng Excel ma trận trắc nghiệm.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-amber-50/80 border border-amber-200/80 p-3.5 rounded-xl text-sm sm:text-base text-amber-900 flex items-start space-x-2.5">
+        <svg class="w-5 h-5 text-amber-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        <span><b>Lưu ý vị trí:</b> Vị trí các nhóm không thay đổi theo cấu trúc đề gốc đưa vào (Phần I luôn trước Phần II, v.v.).</span>
+      </div>
+
+      <div class="space-y-3 pt-1">
+        <h3 class="text-sm sm:text-base font-bold text-slate-800 uppercase tracking-wider">Yêu cầu soạn câu hỏi và đáp án</h3>
+        <ol class="list-decimal list-inside space-y-2 text-sm sm:text-base text-slate-700 leading-relaxed">
+          <li><b>Bắt đầu câu hỏi:</b> Bắt buộc bắt đầu bằng chữ <code class="bg-slate-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">Câu</code> (Ví dụ: <i>Câu 1.</i>, <i>Câu 2.</i>) hoặc <code class="bg-slate-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">Question</code>.</li>
+          <li><b>Xuống dòng trước khi gõ đáp án:</b> Nhấn <b>Enter</b> để xuống dòng trước khi bắt đầu gõ đáp án.</li>
+          <li><b>Khai báo câu trả lời ngắn (Phần III):</b> Dòng đáp án bắt đầu bằng chữ hoa <b>A.</b> rồi đến nội dung/con số (Ví dụ: <i>A. 19.</i> hoặc <u><i>A.19.</i></u>).</li>
+          <li><b>Khai báo trắc nghiệm Đúng/Sai &amp; Nhiều lựa chọn:</b> Gạch chân toàn bộ phương án đúng để máy nhận diện tự động (Ví dụ: <u>A. Hà Nội</u>).</li>
+          <li><b>Hình ảnh:</b> Chọn chế độ <b>Inline with Text</b> trong Word để hình bám chặt vào đề, không bị nhảy khi hoán vị.</li>
+        </ol>
+      </div>
+    </div>
+  </main>
+
+  <!-- Chân Trang Web (Footer Xanh Dương Gọn Gàng) -->
+  <footer class="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white py-2.5 px-4 border-t border-white/10 mt-6 shadow-inner shrink-0">
+    <div class="max-w-5xl mx-auto flex flex-col items-center justify-center text-center space-y-0.5 text-xs text-blue-100">
+      <p class="leading-normal flex flex-wrap items-center justify-center gap-x-1.5">
+        <span class="font-medium text-white/90">Hướng dẫn:</span>
+        <a href="mailto:nhicnttcantho@gmail.com" class="text-white hover:underline font-semibold transition">nhicnttcantho@gmail.com</a>
+        <span class="opacity-60">–</span>
+        <span>zalo: <a href="https://zalo.me/0917809488" target="_blank" class="text-white font-bold hover:underline transition">0917809488</a></span>
+      </p>
+      <p class="text-[13px] text-blue-200/80 font-medium">
+        Copyright &copy; 2026 | <span class="font-bold text-white tracking-wider">SMARTMIX PRO</span>
+      </p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
