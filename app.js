@@ -1618,7 +1618,6 @@ function initGoogleAuth() {
   const menuAvatarImg = document.getElementById('menuAvatarImg');
   const menuUserName = document.getElementById('menuUserName');
   const menuUserEmail = document.getElementById('menuUserEmail');
-  const btnConfigGoogleClient = document.getElementById('btnConfigGoogleClient');
   const btnGoogleLogout = document.getElementById('btnGoogleLogout');
   
   const googleAuthModal = document.getElementById('googleAuthModal');
@@ -1626,10 +1625,6 @@ function initGoogleAuth() {
   const btnConfirmQuickLogin = document.getElementById('btnConfirmQuickLogin');
   const inputDemoName = document.getElementById('inputDemoName');
   const inputDemoEmail = document.getElementById('inputDemoEmail');
-  const inputGoogleClientId = document.getElementById('inputGoogleClientId');
-  const btnSaveClientId = document.getElementById('btnSaveClientId');
-  const gIdSigninWrapper = document.getElementById('g_id_signin_wrapper');
-  const gIdSigninBtn = document.getElementById('g_id_signin_btn');
 
   const authToast = document.getElementById('authToast');
   const authToastMsg = document.getElementById('authToastMsg');
@@ -1671,10 +1666,7 @@ function initGoogleAuth() {
 
   function openAuthModal() {
     if (!googleAuthModal) return;
-    const savedClientId = localStorage.getItem('smartmix_google_client_id') || '';
-    if (inputGoogleClientId) inputGoogleClientId.value = savedClientId;
     googleAuthModal.classList.remove('hidden');
-    setupGISButton();
   }
 
   function closeAuthModal() {
@@ -1693,59 +1685,6 @@ function initGoogleAuth() {
     localStorage.removeItem('smartmix_user');
     renderUserUI(null);
     showToast('Đã đăng xuất khỏi tài khoản.');
-  }
-
-  // Giải mã JWT Credential Token từ Google Identity Services
-  function decodeJwtResponse(token) {
-    try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-      }).join(''));
-      return JSON.parse(jsonPayload);
-    } catch (e) {
-      console.error('Lỗi giải mã token Google:', e);
-      return null;
-    }
-  }
-
-  window.handleGoogleCredentialResponse = function(response) {
-    if (!response || !response.credential) return;
-    const payload = decodeJwtResponse(response.credential);
-    if (payload) {
-      const user = {
-        name: payload.name || payload.email,
-        email: payload.email,
-        picture: payload.picture,
-        sub: payload.sub
-      };
-      loginUser(user);
-    }
-  };
-
-  function setupGISButton() {
-    const clientId = localStorage.getItem('smartmix_google_client_id');
-    if (clientId && window.google && window.google.accounts && window.google.accounts.id) {
-      try {
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: window.handleGoogleCredentialResponse
-        });
-        if (gIdSigninBtn) {
-          gIdSigninBtn.innerHTML = '';
-          window.google.accounts.id.renderButton(
-            gIdSigninBtn,
-            { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', width: 280 }
-          );
-        }
-        if (gIdSigninWrapper) gIdSigninWrapper.classList.remove('hidden');
-      } catch (err) {
-        console.warn('Lỗi khởi tạo Google GIS:', err);
-      }
-    } else {
-      if (gIdSigninWrapper) gIdSigninWrapper.classList.add('hidden');
-    }
   }
 
   // Gán sự kiện
@@ -1782,13 +1721,6 @@ function initGoogleAuth() {
     btnGoogleLogout.addEventListener('click', logoutUser);
   }
 
-  if (btnConfigGoogleClient) {
-    btnConfigGoogleClient.addEventListener('click', () => {
-      if (userMenuDropdown) userMenuDropdown.classList.add('hidden');
-      openAuthModal();
-    });
-  }
-
   if (btnConfirmQuickLogin) {
     btnConfirmQuickLogin.addEventListener('click', () => {
       const name = (inputDemoName && inputDemoName.value.trim()) || 'Quách Nhị';
@@ -1797,17 +1729,8 @@ function initGoogleAuth() {
         name: name,
         email: email,
         picture: generateAvatarDataUrl(name),
-        provider: 'google_quick'
+        provider: 'google'
       });
-    });
-  }
-
-  if (btnSaveClientId) {
-    btnSaveClientId.addEventListener('click', () => {
-      const cid = (inputGoogleClientId && inputGoogleClientId.value.trim()) || '';
-      localStorage.setItem('smartmix_google_client_id', cid);
-      setupGISButton();
-      showToast('Đã lưu Google Client ID thành công!');
     });
   }
 
@@ -1823,11 +1746,6 @@ function initGoogleAuth() {
   } catch (err) {
     renderUserUI(null);
   }
-
-  // Thiết lập Google GIS sau khi script GIS tải xong
-  window.addEventListener('load', () => {
-    setupGISButton();
-  });
 }
 
 // Tự động khởi chạy Google Auth khi DOM sẵn sàng
