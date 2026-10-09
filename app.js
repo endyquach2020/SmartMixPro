@@ -164,9 +164,9 @@ function cleanChoiceRuns(runs) {
         if (tab.parentNode) tab.parentNode.removeChild(tab);
       });
       const hasContent = (r.textContent && r.textContent.trim().length > 0) ||
-                         r.getElementsByTagName('w:drawing').length > 0 ||
-                         r.getElementsByTagName('w:object').length > 0 ||
-                         r.getElementsByTagName('m:oMath').length > 0;
+        r.getElementsByTagName('w:drawing').length > 0 ||
+        r.getElementsByTagName('w:object').length > 0 ||
+        r.getElementsByTagName('m:oMath').length > 0;
       if (hasContent) {
         cleaned.push(r);
       }
@@ -1527,9 +1527,8 @@ function displayResults(sections) {
   generatedBlobs.forEach(v => {
     const item = document.createElement('div');
     const isOrig = v.isOriginal;
-    item.className = `variant-card p-3 rounded-xl border flex flex-col justify-between items-center text-center space-y-2.5 transition shadow-2xs hover:shadow-md ${
-      isOrig ? 'bg-gradient-to-b from-amber-50 to-orange-50/40 border-amber-200' : 'bg-white border-slate-200/90'
-    }`;
+    item.className = `variant-card p-3 rounded-xl border flex flex-col justify-between items-center text-center space-y-2.5 transition shadow-2xs hover:shadow-md ${isOrig ? 'bg-gradient-to-b from-amber-50 to-orange-50/40 border-amber-200' : 'bg-white border-slate-200/90'
+      }`;
     item.innerHTML = `
       <div class="w-full flex items-center justify-between pb-1 border-b ${isOrig ? 'border-amber-200/60' : 'border-slate-100'}">
         <span class="text-[12px] font-mono font-bold px-1.5 py-0.5 rounded ${isOrig ? 'bg-amber-200/70 text-amber-800' : 'bg-blue-50 text-blue-700'}">
@@ -1542,8 +1541,7 @@ function displayResults(sections) {
           ${isOrig ? 'Đề gốc (000)' : `Mã đề ${v.code}`}
         </div>
       </div>
-      <button class="w-full text-xs py-1.5 px-2 rounded-lg font-bold text-white transition flex items-center justify-center space-x-1.5 shadow-xs ${
-        isOrig ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
+      <button class="w-full text-xs py-1.5 px-2 rounded-lg font-bold text-white transition flex items-center justify-center space-x-1.5 shadow-xs ${isOrig ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
       }">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
         <span>Tải Word</span>
@@ -1604,4 +1602,237 @@ async function downloadAllZip() {
 
   const content = await zip.generateAsync({ type: "blob" });
   saveAs(content, "smartmix.zip");
+}
+
+// ==========================================================================
+// GOOGLE IDENTITY & AUTHENTICATION MODULE
+// ==========================================================================
+
+function initGoogleAuth() {
+  const btnGoogleLogin = document.getElementById('btnGoogleLogin');
+  const userProfileBox = document.getElementById('userProfileBox');
+  const userProfileBtn = document.getElementById('userProfileBtn');
+  const userMenuDropdown = document.getElementById('userMenuDropdown');
+  const userAvatarImg = document.getElementById('userAvatarImg');
+  const userNameLabel = document.getElementById('userNameLabel');
+  const menuAvatarImg = document.getElementById('menuAvatarImg');
+  const menuUserName = document.getElementById('menuUserName');
+  const menuUserEmail = document.getElementById('menuUserEmail');
+  const btnConfigGoogleClient = document.getElementById('btnConfigGoogleClient');
+  const btnGoogleLogout = document.getElementById('btnGoogleLogout');
+  
+  const googleAuthModal = document.getElementById('googleAuthModal');
+  const btnCloseAuthModal = document.getElementById('btnCloseAuthModal');
+  const btnConfirmQuickLogin = document.getElementById('btnConfirmQuickLogin');
+  const inputDemoName = document.getElementById('inputDemoName');
+  const inputDemoEmail = document.getElementById('inputDemoEmail');
+  const inputGoogleClientId = document.getElementById('inputGoogleClientId');
+  const btnSaveClientId = document.getElementById('btnSaveClientId');
+  const gIdSigninWrapper = document.getElementById('g_id_signin_wrapper');
+  const gIdSigninBtn = document.getElementById('g_id_signin_btn');
+
+  const authToast = document.getElementById('authToast');
+  const authToastMsg = document.getElementById('authToastMsg');
+
+  let toastTimer = null;
+  function showToast(message) {
+    if (!authToast || !authToastMsg) return;
+    authToastMsg.textContent = message;
+    authToast.classList.remove('hidden');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      authToast.classList.add('hidden');
+    }, 3500);
+  }
+
+  function generateAvatarDataUrl(name) {
+    const initial = (name ? name.trim().charAt(0) : 'U').toUpperCase();
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="#2563eb"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="28" font-weight="bold">${initial}</text></svg>`;
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+  }
+
+  function renderUserUI(user) {
+    if (user) {
+      if (btnGoogleLogin) btnGoogleLogin.classList.add('hidden');
+      if (userProfileBox) userProfileBox.classList.remove('hidden');
+
+      const avatarSrc = user.picture || generateAvatarDataUrl(user.name);
+      if (userAvatarImg) userAvatarImg.src = avatarSrc;
+      if (menuAvatarImg) menuAvatarImg.src = avatarSrc;
+      if (userNameLabel) userNameLabel.textContent = user.name || 'Người dùng';
+      if (menuUserName) menuUserName.textContent = user.name || 'Người dùng';
+      if (menuUserEmail) menuUserEmail.textContent = user.email || '';
+    } else {
+      if (btnGoogleLogin) btnGoogleLogin.classList.remove('hidden');
+      if (userProfileBox) userProfileBox.classList.add('hidden');
+      if (userMenuDropdown) userMenuDropdown.classList.add('hidden');
+    }
+  }
+
+  function openAuthModal() {
+    if (!googleAuthModal) return;
+    const savedClientId = localStorage.getItem('smartmix_google_client_id') || '';
+    if (inputGoogleClientId) inputGoogleClientId.value = savedClientId;
+    googleAuthModal.classList.remove('hidden');
+    setupGISButton();
+  }
+
+  function closeAuthModal() {
+    if (!googleAuthModal) return;
+    googleAuthModal.classList.add('hidden');
+  }
+
+  function loginUser(userData) {
+    localStorage.setItem('smartmix_user', JSON.stringify(userData));
+    renderUserUI(userData);
+    closeAuthModal();
+    showToast(`Chào mừng ${userData.name}, bạn đã đăng nhập thành công!`);
+  }
+
+  function logoutUser() {
+    localStorage.removeItem('smartmix_user');
+    renderUserUI(null);
+    showToast('Đã đăng xuất khỏi tài khoản.');
+  }
+
+  // Giải mã JWT Credential Token từ Google Identity Services
+  function decodeJwtResponse(token) {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      return JSON.parse(jsonPayload);
+    } catch (e) {
+      console.error('Lỗi giải mã token Google:', e);
+      return null;
+    }
+  }
+
+  window.handleGoogleCredentialResponse = function(response) {
+    if (!response || !response.credential) return;
+    const payload = decodeJwtResponse(response.credential);
+    if (payload) {
+      const user = {
+        name: payload.name || payload.email,
+        email: payload.email,
+        picture: payload.picture,
+        sub: payload.sub
+      };
+      loginUser(user);
+    }
+  };
+
+  function setupGISButton() {
+    const clientId = localStorage.getItem('smartmix_google_client_id');
+    if (clientId && window.google && window.google.accounts && window.google.accounts.id) {
+      try {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: window.handleGoogleCredentialResponse
+        });
+        if (gIdSigninBtn) {
+          gIdSigninBtn.innerHTML = '';
+          window.google.accounts.id.renderButton(
+            gIdSigninBtn,
+            { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', width: 280 }
+          );
+        }
+        if (gIdSigninWrapper) gIdSigninWrapper.classList.remove('hidden');
+      } catch (err) {
+        console.warn('Lỗi khởi tạo Google GIS:', err);
+      }
+    } else {
+      if (gIdSigninWrapper) gIdSigninWrapper.classList.add('hidden');
+    }
+  }
+
+  // Gán sự kiện
+  if (btnGoogleLogin) {
+    btnGoogleLogin.addEventListener('click', openAuthModal);
+  }
+
+  if (btnCloseAuthModal) {
+    btnCloseAuthModal.addEventListener('click', closeAuthModal);
+  }
+
+  if (googleAuthModal) {
+    googleAuthModal.addEventListener('click', (e) => {
+      if (e.target === googleAuthModal) closeAuthModal();
+    });
+  }
+
+  if (userProfileBtn) {
+    userProfileBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (userMenuDropdown) {
+        userMenuDropdown.classList.toggle('hidden');
+      }
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (userProfileBox && !userProfileBox.contains(e.target)) {
+      if (userMenuDropdown) userMenuDropdown.classList.add('hidden');
+    }
+  });
+
+  if (btnGoogleLogout) {
+    btnGoogleLogout.addEventListener('click', logoutUser);
+  }
+
+  if (btnConfigGoogleClient) {
+    btnConfigGoogleClient.addEventListener('click', () => {
+      if (userMenuDropdown) userMenuDropdown.classList.add('hidden');
+      openAuthModal();
+    });
+  }
+
+  if (btnConfirmQuickLogin) {
+    btnConfirmQuickLogin.addEventListener('click', () => {
+      const name = (inputDemoName && inputDemoName.value.trim()) || 'Quách Nhị';
+      const email = (inputDemoEmail && inputDemoEmail.value.trim()) || 'nhicnttcantho@gmail.com';
+      loginUser({
+        name: name,
+        email: email,
+        picture: generateAvatarDataUrl(name),
+        provider: 'google_quick'
+      });
+    });
+  }
+
+  if (btnSaveClientId) {
+    btnSaveClientId.addEventListener('click', () => {
+      const cid = (inputGoogleClientId && inputGoogleClientId.value.trim()) || '';
+      localStorage.setItem('smartmix_google_client_id', cid);
+      setupGISButton();
+      showToast('Đã lưu Google Client ID thành công!');
+    });
+  }
+
+  // Tải trạng thái đăng nhập từ localStorage khi mở trang
+  try {
+    const savedUserJson = localStorage.getItem('smartmix_user');
+    if (savedUserJson) {
+      const savedUser = JSON.parse(savedUserJson);
+      renderUserUI(savedUser);
+    } else {
+      renderUserUI(null);
+    }
+  } catch (err) {
+    renderUserUI(null);
+  }
+
+  // Thiết lập Google GIS sau khi script GIS tải xong
+  window.addEventListener('load', () => {
+    setupGISButton();
+  });
+}
+
+// Tự động khởi chạy Google Auth khi DOM sẵn sàng
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initGoogleAuth);
+} else {
+  initGoogleAuth();
 }
