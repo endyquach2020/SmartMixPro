@@ -1061,6 +1061,12 @@ async function startProcessing() {
     return;
   }
 
+  // Kiểm tra quyền trộn và thời hạn tài khoản
+  const canMix = await checkUserPermissionToMix();
+  if (!canMix) {
+    return;
+  }
+
   const btnProcess = document.getElementById('btnProcess');
   btnProcess.disabled = true;
   btnProcess.innerHTML = `
@@ -1583,6 +1589,11 @@ function displayResults(sections) {
 
   const resultCard = document.getElementById('resultCard');
   if (resultCard) resultCard.classList.remove('hidden');
+
+  // Ghi nhận lượt trộn thành công để quản lý giới hạn
+  if (typeof recordSuccessfulMix === 'function') {
+    recordSuccessfulMix();
+  }
 }
 
 // Tải file ZIP trọn gói
@@ -1605,8 +1616,14 @@ async function downloadAllZip() {
 }
 
 // ==========================================================================
-// GOOGLE IDENTITY & FIREBASE AUTHENTICATION MODULE
+// GOOGLE IDENTITY, FIREBASE AUTHENTICATION & USER EXPIRY MANAGEMENT MODULE
 // ==========================================================================
+
+// Danh sách email có quyền Quản trị tối cao (Admin)
+const ADMIN_EMAILS = [
+  'nhicnttcantho@gmail.com',
+  'endyquach2020@gmail.com'
+];
 
 // Cấu hình Firebase chính thức từ dự án: smartmixpro-826d3
 const firebaseConfig = {
@@ -1621,7 +1638,30 @@ const firebaseConfig = {
 
 let firebaseAuth = null;
 let googleAuthProvider = null;
+let firestoreDb = null;
+let currentClientIp = 'device_' + getOrCreateDeviceId();
 
+function getOrCreateDeviceId() {
+  let devId = localStorage.getItem('smartmix_device_id');
+  if (!devId) {
+    devId = Math.random().toString(36).substring(2, 12);
+    localStorage.setItem('smartmix_device_id', devId);
+  }
+  return devId;
+}
+
+// Tự động nhận diện IP máy của khách (hỗ trợ kiểm tra giới hạn 2 lần trộn)
+fetch('https://api.ipify.org?format=json')
+  .then(res => res.json())
+  .then(data => {
+    if (data && data.ip) {
+      currentClientIp = data.ip;
+      updateAdminStatsUI();
+    }
+  })
+  .catch(() => {});
+
+// Khởi tạo Firebase SDK
 try {
   if (window.firebase) {
     if (!firebase.apps.length) {
@@ -1629,14 +1669,505 @@ try {
     }
     firebaseAuth = firebase.auth();
     googleAuthProvider = new firebase.auth.GoogleAuthProvider();
-    // Luôn hiển thị hộp thoại chọn tài khoản Google nếu có nhiều tài khoản
     googleAuthProvider.setCustomParameters({
       prompt: 'select_account'
     });
+    if (firebase.firestore) {
+      firestoreDb = firebase.firestore();
+    }
   }
 } catch (e) {
   console.warn("Khởi tạo Firebase thất bại:", e);
 }
+
+// --------------------------------------------------------------------------
+// QUẢN LÝ DỮ LIỆU USER & THỜI HẠN (CLOUD FIRESTORE + LOCAL CACHE)
+// --------------------------------------------------------------------------
+
+function getUsersDb() {
+  try {
+    const raw = localStorage.getItem('smartmix_users_db');
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveUsersDb(users) {
+  try {
+    localStorage.setItem('smartmix_users_db', JSON.stringify(users));
+  } catch (e) {}
+}
+
+async function syncUserToCloud(email, userData) {
+  if (!firestoreDb) return;
+  try {
+    const docId = email.toLowerCase().replace(/[./@]/g, '_');
+    await firestoreDb.collection('users').doc(docId).set(userData, { merge: true });
+  } catch (e) {
+    console.warn("Firestore sync error:", e);
+  }
+}
+
+function initFirestoreSync() {
+  if (!firestoreDb) return;
+  try {
+    firestoreDb.collection('users').onSnapshot((snapshot) => {
+      const users = getUsersDb();
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (data && data.email) {
+          users[data.email.toLowerCase()] = data;
+        }
+      });
+      saveUsersDb(users);
+      if (firebaseAuth && firebaseAuth.currentUser) {
+        updateCurrentUserExpiryBadge(firebaseAuth.currentUser);
+      }
+      renderAdminUserTable();
+      updateAdminStatsUI();
+    }, err => {
+      console.warn("Firestore listener error:", err);
+    });
+  } catch (e) {}
+}
+
+// --------------------------------------------------------------------------
+// QUẢN LÝ GIỚI HẠN LƯỢT TRỘN CHO KHÁCH (CHƯA ĐĂNG NHẬP)
+// --------------------------------------------------------------------------
+
+function getGuestMixCount() {
+  const ipKey = `smartmix_guest_mixes_${currentClientIp}`;
+  const devKey = `smartmix_guest_mixes_${getOrCreateDeviceId()}`;
+  const c1 = parseInt(localStorage.getItem(ipKey) || '0', 10);
+  const c2 = parseInt(localStorage.getItem(devKey) || '0', 10);
+  return Math.max(c1, c2);
+}
+
+function recordSuccessfulMix() {
+  const user = firebaseAuth ? firebaseAuth.currentUser : null;
+  if (!user) {
+    // Tăng lượt trộn của khách
+    const ipKey = `smartmix_guest_mixes_${currentClientIp}`;
+    const devKey = `smartmix_guest_mixes_${getOrCreateDeviceId()}`;
+    const newCount = getGuestMixCount() + 1;
+    localStorage.setItem(ipKey, newCount.toString());
+    localStorage.setItem(devKey, newCount.toString());
+    updateAdminStatsUI();
+  } else {
+    // Tăng lượt trộn của user đăng nhập
+    const email = (user.email || '').toLowerCase().trim();
+    const users = getUsersDb();
+    if (users[email]) {
+      users[email].mixCount = (users[email].mixCount || 0) + 1;
+      saveUsersDb(users);
+      syncUserToCloud(email, users[email]);
+    }
+  }
+}
+
+// Kiểm tra quyền được phép trộn đề
+async function checkUserPermissionToMix() {
+  const user = firebaseAuth ? firebaseAuth.currentUser : null;
+
+  // Trường hợp 1: Chưa đăng nhập (Khách)
+  if (!user) {
+    const count = getGuestMixCount();
+    if (count >= 2) {
+      showLimitModal({
+        icon: 'lock',
+        title: 'Giới hạn lượt trộn thử nghiệm',
+        desc: 'Bạn đã sử dụng hết <b>2 lượt trộn đề miễn phí</b> trên thiết bị này.<br>Vui lòng đăng nhập bằng tài khoản Google để tiếp tục sử dụng hệ thống.',
+        showLoginBtn: true
+      });
+      return false;
+    }
+    return true; // Dưới 2 lần thì cho phép trộn bình thường mà không thông báo
+  }
+
+  // Trường hợp 2: Đã đăng nhập
+  const email = (user.email || '').toLowerCase().trim();
+  if (ADMIN_EMAILS.includes(email)) {
+    return true; // Admin vĩnh viễn không bị giới hạn
+  }
+
+  const users = getUsersDb();
+  let userRec = users[email];
+
+  if (!userRec) {
+    await registerOrUpdateUser(user);
+    userRec = getUsersDb()[email];
+  }
+
+  // Kiểm tra nếu tài khoản bị khóa
+  if (userRec && userRec.status === 'blocked') {
+    showLimitModal({
+      icon: 'blocked',
+      title: 'Tài khoản đã bị tạm khóa',
+      desc: `Tài khoản <b>${email}</b> đã bị tạm ngưng quyền trộn đề.<br>Vui lòng liên hệ Admin (nhicnttcantho@gmail.com - Zalo: 0917809488) để mở khóa.`,
+      showLoginBtn: false
+    });
+    return false;
+  }
+
+  // Kiểm tra thời hạn sử dụng
+  if (userRec && userRec.expiryDate && userRec.expiryDate !== 'unlimited') {
+    const expiry = new Date(userRec.expiryDate + 'T23:59:59');
+    const today = new Date();
+    if (today > expiry) {
+      const formatted = formatDateDisplay(userRec.expiryDate);
+      showLimitModal({
+        icon: 'expired',
+        title: 'Tài khoản đã hết hạn sử dụng',
+        desc: `Tài khoản <b>${email}</b> đã hết hạn sử dụng vào ngày <b>${formatted}</b>.<br>Vui lòng liên hệ Admin (nhicnttcantho@gmail.com - Zalo: 0917809488) để gia hạn thêm thời gian sử dụng.`,
+        showLoginBtn: false
+      });
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// --------------------------------------------------------------------------
+// MODAL THÔNG BÁO GIỚI HẠN / HẾT HẠN
+// --------------------------------------------------------------------------
+
+function showLimitModal({ icon, title, desc, showLoginBtn }) {
+  const modal = document.getElementById('limitNoticeModal');
+  const modalTitle = document.getElementById('limitModalTitle');
+  const modalDesc = document.getElementById('limitModalDesc');
+  const btnLogin = document.getElementById('btnLimitActionLogin');
+  const btnClose = document.getElementById('btnCloseLimitModal');
+
+  if (!modal) return;
+  if (modalTitle) modalTitle.textContent = title;
+  if (modalDesc) modalDesc.innerHTML = desc;
+
+  if (btnLogin) {
+    if (showLoginBtn) {
+      btnLogin.classList.remove('hidden');
+      btnLogin.onclick = () => {
+        modal.classList.add('hidden');
+        if (firebaseAuth && googleAuthProvider) {
+          firebaseAuth.signInWithPopup(googleAuthProvider).catch(err => console.warn(err));
+        }
+      };
+    } else {
+      btnLogin.classList.add('hidden');
+    }
+  }
+
+  if (btnClose) {
+    btnClose.onclick = () => modal.classList.add('hidden');
+  }
+
+  modal.classList.remove('hidden');
+}
+
+// Định dạng ngày DD/MM/YYYY
+function formatDateDisplay(dateStr) {
+  if (!dateStr || dateStr === 'unlimited') return 'Vĩnh viễn';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return dateStr;
+}
+
+// Tính số ngày còn lại
+function getDaysRemaining(expiryStr) {
+  if (!expiryStr || expiryStr === 'unlimited') return Infinity;
+  const expiry = new Date(expiryStr + 'T23:59:59');
+  const now = new Date();
+  const diffTime = expiry - now;
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
+// --------------------------------------------------------------------------
+// ĐĂNG NHẬP & CẬP NHẬT TRẠNG THÁI TÀI KHOẢN
+// --------------------------------------------------------------------------
+
+async function registerOrUpdateUser(user) {
+  const email = (user.email || '').toLowerCase().trim();
+  if (!email) return;
+
+  const users = getUsersDb();
+  const isAdmin = ADMIN_EMAILS.includes(email);
+  const now = new Date();
+
+  if (!users[email]) {
+    // Tài khoản mới lần đầu đăng nhập: Cấp dùng thử 30 ngày (hoặc vĩnh viễn nếu là Admin)
+    const defaultExpiry = isAdmin 
+      ? 'unlimited' 
+      : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    users[email] = {
+      email: email,
+      name: user.displayName || 'Người dùng',
+      photoURL: user.photoURL || '',
+      createdAt: now.toISOString(),
+      lastLogin: now.toISOString(),
+      expiryDate: defaultExpiry,
+      mixCount: 0,
+      status: 'active',
+      isAdmin: isAdmin
+    };
+  } else {
+    users[email].lastLogin = now.toISOString();
+    if (user.displayName) users[email].name = user.displayName;
+    if (user.photoURL) users[email].photoURL = user.photoURL;
+    if (isAdmin) {
+      users[email].expiryDate = 'unlimited';
+      users[email].isAdmin = true;
+    }
+  }
+
+  saveUsersDb(users);
+  await syncUserToCloud(email, users[email]);
+  updateCurrentUserExpiryBadge(user);
+}
+
+function updateCurrentUserExpiryBadge(user) {
+  const badgeText = document.getElementById('userExpiryText');
+  const badgeContainer = document.getElementById('userExpiryBadge');
+  if (!badgeText || !badgeContainer || !user) return;
+
+  const email = (user.email || '').toLowerCase().trim();
+  const isAdmin = ADMIN_EMAILS.includes(email);
+
+  if (isAdmin) {
+    badgeText.textContent = "Hạn dùng: Vĩnh viễn (Admin)";
+    badgeContainer.className = "text-xs text-amber-700 font-bold flex items-center space-x-1.5 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200/80";
+    return;
+  }
+
+  const users = getUsersDb();
+  const userRec = users[email];
+  if (!userRec || !userRec.expiryDate) {
+    badgeText.textContent = "Hạn dùng: 30 ngày dùng thử";
+    return;
+  }
+
+  if (userRec.expiryDate === 'unlimited') {
+    badgeText.textContent = "Hạn dùng: Vĩnh viễn";
+    badgeContainer.className = "text-xs text-emerald-700 font-bold flex items-center space-x-1.5 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200/80";
+  } else {
+    const days = getDaysRemaining(userRec.expiryDate);
+    const dateFormatted = formatDateDisplay(userRec.expiryDate);
+    if (days < 0) {
+      badgeText.textContent = `Hết hạn: ${dateFormatted} (Đã hết hạn)`;
+      badgeContainer.className = "text-xs text-rose-700 font-bold flex items-center space-x-1.5 bg-rose-50 px-2.5 py-1 rounded-md border border-rose-200/80";
+    } else {
+      badgeText.textContent = `Hạn dùng: ${dateFormatted} (Còn ${days} ngày)`;
+      badgeContainer.className = "text-xs text-blue-700 font-bold flex items-center space-x-1.5 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200/80";
+    }
+  }
+}
+
+// --------------------------------------------------------------------------
+// ADMIN DASHBOARD: QUẢN LÝ TÀI KHOẢN & SÉT THỜI HẠN
+// --------------------------------------------------------------------------
+
+function updateAdminStatsUI() {
+  const users = getUsersDb();
+  const userList = Object.values(users);
+  const now = new Date();
+
+  let active = 0;
+  let expired = 0;
+
+  userList.forEach(u => {
+    if (u.status === 'blocked') {
+      expired++;
+    } else if (u.expiryDate === 'unlimited') {
+      active++;
+    } else if (u.expiryDate) {
+      const exp = new Date(u.expiryDate + 'T23:59:59');
+      if (now > exp) expired++;
+      else active++;
+    } else {
+      active++;
+    }
+  });
+
+  const statTotal = document.getElementById('statTotalUsers');
+  const statActive = document.getElementById('statActiveUsers');
+  const statExpired = document.getElementById('statExpiredUsers');
+  const statGuest = document.getElementById('statGuestMixes');
+
+  if (statTotal) statTotal.textContent = userList.length.toString();
+  if (statActive) statActive.textContent = active.toString();
+  if (statExpired) statExpired.textContent = expired.toString();
+  if (statGuest) statGuest.textContent = `${getGuestMixCount()} / 2`;
+}
+
+function renderAdminUserTable(searchKeyword = '') {
+  const tbody = document.getElementById('adminUserTableBody');
+  if (!tbody) return;
+
+  const users = getUsersDb();
+  let list = Object.values(users);
+
+  if (searchKeyword.trim()) {
+    const kw = searchKeyword.toLowerCase().trim();
+    list = list.filter(u => 
+      (u.email && u.email.toLowerCase().includes(kw)) || 
+      (u.name && u.name.toLowerCase().includes(kw))
+    );
+  }
+
+  // Sắp xếp: Admin lên đầu, sau đó theo lần đăng nhập gần nhất
+  list.sort((a, b) => {
+    if (ADMIN_EMAILS.includes(a.email)) return -1;
+    if (ADMIN_EMAILS.includes(b.email)) return 1;
+    return new Date(b.lastLogin || 0) - new Date(a.lastLogin || 0);
+  });
+
+  if (list.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4" class="py-8 text-center text-slate-400 text-xs">
+          Chưa có tài khoản nào được ghi nhận. Khi có người đăng nhập hoặc thêm email, danh sách sẽ hiển thị ở đây.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = list.map(u => {
+    const isSuperAdmin = ADMIN_EMAILS.includes(u.email.toLowerCase());
+    const days = getDaysRemaining(u.expiryDate);
+    const dateFormatted = formatDateDisplay(u.expiryDate);
+
+    let statusBadge = '';
+    if (isSuperAdmin) {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">👑 Vĩnh viễn (Admin)</span>`;
+    } else if (u.status === 'blocked') {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-200 text-slate-700">🔒 Đã khóa</span>`;
+    } else if (u.expiryDate === 'unlimited') {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-200">✨ Vĩnh viễn</span>`;
+    } else if (days < 0) {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700 border border-rose-200">❌ Hết hạn (${dateFormatted})</span>`;
+    } else {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">✅ Còn ${days} ngày (${dateFormatted})</span>`;
+    }
+
+    const lastLoginFormatted = u.lastLogin ? new Date(u.lastLogin).toLocaleDateString('vi-VN', {
+      hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric'
+    }) : 'Chưa đăng nhập';
+
+    const defaultDateVal = (u.expiryDate && u.expiryDate !== 'unlimited') ? u.expiryDate : '';
+
+    return `
+      <tr class="hover:bg-slate-50/80 transition">
+        <td class="py-3 px-3.5">
+          <div class="flex items-center space-x-2.5">
+            <img src="${u.photoURL || generateAvatarDataUrl(u.name || u.email)}" class="w-8 h-8 rounded-full border border-slate-200 object-cover bg-slate-100">
+            <div class="overflow-hidden">
+              <div class="font-bold text-slate-900 truncate flex items-center space-x-1.5">
+                <span>${u.name || 'Người dùng'}</span>
+                ${isSuperAdmin ? '<span class="text-[10px] bg-amber-500 text-white font-extrabold px-1 rounded">ADMIN</span>' : ''}
+              </div>
+              <div class="text-[11px] text-slate-500 font-mono truncate">${u.email}</div>
+            </div>
+          </div>
+        </td>
+
+        <td class="py-3 px-3.5 text-slate-600 text-xs">
+          <div>${lastLoginFormatted}</div>
+          <div class="text-[11px] text-slate-400">Đã trộn: <b>${u.mixCount || 0}</b> đề</div>
+        </td>
+
+        <td class="py-3 px-3.5">
+          ${statusBadge}
+        </td>
+
+        <td class="py-3 px-3.5 text-right">
+          ${isSuperAdmin ? `
+            <span class="text-xs text-slate-400 italic">Tài khoản chính</span>
+          ` : `
+            <div class="flex flex-wrap items-center justify-end gap-1">
+              <button onclick="setExpiryForEmail('${u.email}', 7)" class="px-1.5 py-1 text-[11px] font-bold rounded bg-slate-100 hover:bg-blue-100 hover:text-blue-700 transition cursor-pointer" title="Cộng thêm 7 ngày">+7d</button>
+              <button onclick="setExpiryForEmail('${u.email}', 30)" class="px-1.5 py-1 text-[11px] font-bold rounded bg-slate-100 hover:bg-blue-100 hover:text-blue-700 transition cursor-pointer" title="Cộng thêm 30 ngày">+30d</button>
+              <button onclick="setExpiryForEmail('${u.email}', 90)" class="px-1.5 py-1 text-[11px] font-bold rounded bg-slate-100 hover:bg-blue-100 hover:text-blue-700 transition cursor-pointer" title="Cộng thêm 3 tháng">+90d</button>
+              <button onclick="setExpiryForEmail('${u.email}', 365)" class="px-1.5 py-1 text-[11px] font-bold rounded bg-slate-100 hover:bg-blue-100 hover:text-blue-700 transition cursor-pointer" title="Cộng thêm 1 năm">+1y</button>
+              <button onclick="setExpiryForEmail('${u.email}', 'unlimited')" class="px-2 py-1 text-[11px] font-bold rounded bg-purple-50 text-purple-700 hover:bg-purple-100 transition cursor-pointer" title="Set vĩnh viễn">Vĩnh viễn</button>
+              
+              <input type="date" value="${defaultDateVal}" onchange="setCustomExpiryDate('${u.email}', this.value)" class="text-[11px] h-7 px-1.5 bg-slate-50 border border-slate-200 rounded cursor-pointer" title="Chọn ngày hết hạn cụ thể">
+              
+              <button onclick="toggleBlockUser('${u.email}')" class="px-2 py-1 text-[11px] font-bold rounded ${u.status === 'blocked' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'} transition cursor-pointer">
+                ${u.status === 'blocked' ? 'Mở' : 'Khóa'}
+              </button>
+            </div>
+          `}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// Hàm Admin gọi sét thời hạn theo số ngày
+window.setExpiryForEmail = function(email, daysOrUnlimited) {
+  const users = getUsersDb();
+  if (!users[email]) return;
+
+  if (daysOrUnlimited === 'unlimited') {
+    users[email].expiryDate = 'unlimited';
+    users[email].status = 'active';
+  } else {
+    const days = parseInt(daysOrUnlimited, 10);
+    let baseTime = new Date();
+    // Nếu tài khoản còn hạn, cộng tiếp từ ngày hết hạn cũ
+    if (users[email].expiryDate && users[email].expiryDate !== 'unlimited') {
+      const oldExp = new Date(users[email].expiryDate + 'T23:59:59');
+      if (oldExp > baseTime) baseTime = oldExp;
+    }
+    const newExp = new Date(baseTime.getTime() + days * 24 * 60 * 60 * 1000);
+    users[email].expiryDate = newExp.toISOString().split('T')[0];
+    users[email].status = 'active';
+  }
+
+  saveUsersDb(users);
+  syncUserToCloud(email, users[email]);
+  renderAdminUserTable(document.getElementById('inputSearchUser')?.value || '');
+  updateAdminStatsUI();
+
+  const authToast = document.getElementById('authToast');
+  const authToastMsg = document.getElementById('authToastMsg');
+  if (authToast && authToastMsg) {
+    authToastMsg.textContent = `Đã cập nhật hạn dùng cho ${email}: ${formatDateDisplay(users[email].expiryDate)}`;
+    authToast.classList.remove('hidden');
+    setTimeout(() => authToast.classList.add('hidden'), 3500);
+  }
+};
+
+window.setCustomExpiryDate = function(email, dateStr) {
+  if (!dateStr) return;
+  const users = getUsersDb();
+  if (!users[email]) return;
+
+  users[email].expiryDate = dateStr;
+  users[email].status = 'active';
+
+  saveUsersDb(users);
+  syncUserToCloud(email, users[email]);
+  renderAdminUserTable(document.getElementById('inputSearchUser')?.value || '');
+  updateAdminStatsUI();
+};
+
+window.toggleBlockUser = function(email) {
+  const users = getUsersDb();
+  if (!users[email]) return;
+
+  users[email].status = (users[email].status === 'blocked') ? 'active' : 'blocked';
+  saveUsersDb(users);
+  syncUserToCloud(email, users[email]);
+  renderAdminUserTable(document.getElementById('inputSearchUser')?.value || '');
+  updateAdminStatsUI();
+};
+
+// --------------------------------------------------------------------------
+// KHỞI TẠO TỔNG THỂ GIAO DIỆN AUTH & ADMIN
+// --------------------------------------------------------------------------
 
 function initGoogleAuth() {
   const btnGoogleLogin = document.getElementById('btnGoogleLogin');
@@ -1649,6 +2180,13 @@ function initGoogleAuth() {
   const menuUserName = document.getElementById('menuUserName');
   const menuUserEmail = document.getElementById('menuUserEmail');
   const btnGoogleLogout = document.getElementById('btnGoogleLogout');
+  const btnOpenAdminPanel = document.getElementById('btnOpenAdminPanel');
+
+  const adminPanelModal = document.getElementById('adminPanelModal');
+  const btnCloseAdminPanel = document.getElementById('btnCloseAdminPanel');
+  const inputSearchUser = document.getElementById('inputSearchUser');
+  const inputAddEmail = document.getElementById('inputAddEmail');
+  const btnAddEmail = document.getElementById('btnAddEmail');
 
   const authToast = document.getElementById('authToast');
   const authToastMsg = document.getElementById('authToastMsg');
@@ -1664,12 +2202,6 @@ function initGoogleAuth() {
     }, 4000);
   }
 
-  function generateAvatarDataUrl(name) {
-    const initial = (name ? name.trim().charAt(0) : 'U').toUpperCase();
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="#2563eb"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="28" font-weight="bold">${initial}</text></svg>`;
-    return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
-  }
-
   function renderUserUI(user) {
     if (user) {
       if (btnGoogleLogin) btnGoogleLogin.classList.add('hidden');
@@ -1678,20 +2210,33 @@ function initGoogleAuth() {
       const avatarSrc = user.photoURL || user.picture || generateAvatarDataUrl(user.displayName || user.name);
       const name = user.displayName || user.name || 'Người dùng';
       const email = user.email || '';
+      const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
 
       if (userAvatarImg) userAvatarImg.src = avatarSrc;
       if (menuAvatarImg) menuAvatarImg.src = avatarSrc;
       if (userNameLabel) userNameLabel.textContent = name;
       if (menuUserName) menuUserName.textContent = name;
       if (menuUserEmail) menuUserEmail.textContent = email;
+
+      // Nút Admin chỉ hiển thị khi đúng email admin
+      if (btnOpenAdminPanel) {
+        if (isAdmin) {
+          btnOpenAdminPanel.classList.remove('hidden');
+        } else {
+          btnOpenAdminPanel.classList.add('hidden');
+        }
+      }
+
+      updateCurrentUserExpiryBadge(user);
     } else {
       if (btnGoogleLogin) btnGoogleLogin.classList.remove('hidden');
       if (userProfileBox) userProfileBox.classList.add('hidden');
       if (userMenuDropdown) userMenuDropdown.classList.add('hidden');
+      if (btnOpenAdminPanel) btnOpenAdminPanel.classList.add('hidden');
     }
   }
 
-  // Khi click nút "Đăng nhập với Google" -> Bật trực tiếp popup Google chính hãng
+  // Khi click nút "Đăng nhập với Google"
   if (btnGoogleLogin) {
     btnGoogleLogin.addEventListener('click', () => {
       if (!firebaseAuth || !googleAuthProvider) {
@@ -1699,15 +2244,14 @@ function initGoogleAuth() {
         return;
       }
       firebaseAuth.signInWithPopup(googleAuthProvider)
-        .then((result) => {
+        .then(async (result) => {
           const user = result.user;
+          await registerOrUpdateUser(user);
           showToast(`Chào mừng ${user.displayName || 'bạn'}, bạn đã đăng nhập thành công!`);
         })
         .catch((error) => {
           console.error("Lỗi đăng nhập Google:", error);
-          if (error.code === 'auth/popup-closed-by-user') {
-            return;
-          }
+          if (error.code === 'auth/popup-closed-by-user') return;
           if (error.code === 'auth/operation-not-allowed' || error.code === 'auth/configuration-not-found') {
             alert("Lưu ý: Bạn cần vào Firebase Console > Authentication > Sign-in method và BẬT (Enable) phương thức Google nhé!");
           } else {
@@ -1717,7 +2261,7 @@ function initGoogleAuth() {
     });
   }
 
-  // Đăng xuất khỏi tài khoản Google
+  // Đăng xuất
   if (btnGoogleLogout) {
     btnGoogleLogout.addEventListener('click', () => {
       if (firebaseAuth) {
@@ -1744,10 +2288,77 @@ function initGoogleAuth() {
     }
   });
 
-  // Tự động lắng nghe phiên đăng nhập từ Firebase (không bao giờ bị mất đăng nhập khi F5)
+  // Mở Admin Panel
+  if (btnOpenAdminPanel) {
+    btnOpenAdminPanel.addEventListener('click', () => {
+      if (userMenuDropdown) userMenuDropdown.classList.add('hidden');
+      if (adminPanelModal) {
+        adminPanelModal.classList.remove('hidden');
+        renderAdminUserTable();
+        updateAdminStatsUI();
+      }
+    });
+  }
+
+  if (btnCloseAdminPanel) {
+    btnCloseAdminPanel.addEventListener('click', () => {
+      if (adminPanelModal) adminPanelModal.classList.add('hidden');
+    });
+  }
+
+  if (adminPanelModal) {
+    adminPanelModal.addEventListener('click', (e) => {
+      if (e.target === adminPanelModal) adminPanelModal.classList.add('hidden');
+    });
+  }
+
+  // Tìm kiếm trong Admin Panel
+  if (inputSearchUser) {
+    inputSearchUser.addEventListener('input', (e) => {
+      renderAdminUserTable(e.target.value);
+    });
+  }
+
+  // Thêm email cấp phép trước từ Admin Panel
+  if (btnAddEmail) {
+    btnAddEmail.addEventListener('click', () => {
+      const email = (inputAddEmail ? inputAddEmail.value : '').toLowerCase().trim();
+      if (!email || !email.includes('@')) {
+        alert("Vui lòng nhập địa chỉ email hợp lệ!");
+        return;
+      }
+      const users = getUsersDb();
+      if (!users[email]) {
+        const now = new Date();
+        const defaultExp = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        users[email] = {
+          email: email,
+          name: email.split('@')[0],
+          photoURL: '',
+          createdAt: now.toISOString(),
+          lastLogin: '',
+          expiryDate: defaultExp,
+          mixCount: 0,
+          status: 'active',
+          isAdmin: ADMIN_EMAILS.includes(email)
+        };
+        saveUsersDb(users);
+        syncUserToCloud(email, users[email]);
+        renderAdminUserTable();
+        updateAdminStatsUI();
+        if (inputAddEmail) inputAddEmail.value = '';
+        showToast(`Đã thêm email ${email} vào danh sách cấp phép!`);
+      } else {
+        alert("Email này đã có trong danh sách!");
+      }
+    });
+  }
+
+  // Tự động lắng nghe phiên đăng nhập từ Firebase
   if (firebaseAuth) {
-    firebaseAuth.onAuthStateChanged((user) => {
+    firebaseAuth.onAuthStateChanged(async (user) => {
       if (user) {
+        await registerOrUpdateUser(user);
         renderUserUI({
           displayName: user.displayName,
           email: user.email,
@@ -1759,6 +2370,16 @@ function initGoogleAuth() {
       }
     });
   }
+
+  // Khởi động đồng bộ Firestore
+  initFirestoreSync();
+  updateAdminStatsUI();
+}
+
+function generateAvatarDataUrl(name) {
+  const initial = (name ? name.trim().charAt(0) : 'U').toUpperCase();
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="#2563eb"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="28" font-weight="bold">${initial}</text></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
 
 // Tự động khởi chạy Google Auth khi DOM sẵn sàng
