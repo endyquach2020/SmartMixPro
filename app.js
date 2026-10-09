@@ -1610,7 +1610,7 @@ async function downloadAllZip() {
 
 // Cấu hình Firebase chính thức từ dự án: smartmixpro-826d3
 const firebaseConfig = {
-  apiKey: "AIzaSyCP3y20KYZkHlxmxKKQcT9iN80RNIqBJtc",
+  apiKey: "AIzaSyCP3y2OKYZkHlxmxKKQcT9iN80RNIqBJtc",
   authDomain: "smartmixpro-826d3.firebaseapp.com",
   projectId: "smartmixpro-826d3",
   storageBucket: "smartmixpro-826d3.firebasestorage.app",
