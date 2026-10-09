@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2.5.2">
 
   <!-- Firebase SDK v10 Compat (Google Official) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -43,6 +43,13 @@
           <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
           <span class="font-mono text-[13px]">Chuẩn BGD 2026</span>
         </div>
+
+        <!-- Nút mở nhanh Quản lý Email & Hạn dùng (Admin) -->
+        <button id="btnHeaderAdminQuick" type="button" class="flex items-center space-x-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-amber-950 font-bold text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-amber-300 shadow-sm transition active:scale-95 cursor-pointer">
+          <span class="text-sm">👑</span>
+          <span class="hidden sm:inline">Quản lý Email &amp; Hạn</span>
+          <span class="sm:hidden">Quản lý</span>
+        </button>
 
         <!-- Google Auth Section -->
         <div id="googleAuthSection" class="relative">
@@ -122,6 +129,11 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
           </svg>
           <span>Quy tắc soạn đề</span>
+        </button>
+
+        <button type="button" id="tabAdminDirectBtn" class="tab-btn inactive flex items-center space-x-1.5 py-2 px-3 sm:px-4 rounded-lg font-bold text-xs sm:text-sm text-amber-900 hover:text-amber-950 bg-amber-100/90 hover:bg-amber-200/90 border border-amber-300 shadow-2xs transition cursor-pointer">
+          <span class="text-sm">👑</span>
+          <span>Quản lý email &amp; Hạn dùng</span>
         </button>
       </div>
     </div>
@@ -489,6 +501,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2.5.2"></script>
 </body>
 </html>

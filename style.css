@@ -109,3 +109,8 @@ input, button, select, textarea {
 input[type="text"], input[type="number"] {
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
+
+/* Force hidden utility override */
+.hidden {
+  display: none !important;
+}

@@ -1687,7 +1687,29 @@ try {
 function getUsersDb() {
   try {
     const raw = localStorage.getItem('smartmix_users_db');
-    return raw ? JSON.parse(raw) : {};
+    let users = raw ? JSON.parse(raw) : {};
+    let changed = false;
+    ADMIN_EMAILS.forEach(adminEmail => {
+      const emailLower = adminEmail.toLowerCase().trim();
+      if (!users[emailLower]) {
+        users[emailLower] = {
+          email: emailLower,
+          name: emailLower === 'nhicnttcantho@gmail.com' ? 'Admin Nhi (Cần Thơ)' : 'Admin Quách',
+          photoURL: '',
+          createdAt: new Date().toISOString(),
+          lastLogin: '',
+          expiryDate: 'unlimited',
+          mixCount: 0,
+          status: 'active',
+          isAdmin: true
+        };
+        changed = true;
+      }
+    });
+    if (changed) {
+      localStorage.setItem('smartmix_users_db', JSON.stringify(users));
+    }
+    return users;
   } catch (e) {
     return {};
   }
@@ -1699,13 +1721,15 @@ function saveUsersDb(users) {
   } catch (e) {}
 }
 
-async function syncUserToCloud(email, userData) {
+function syncUserToCloud(email, userData) {
   if (!firestoreDb) return;
   try {
     const docId = email.toLowerCase().replace(/[./@]/g, '_');
-    await firestoreDb.collection('users').doc(docId).set(userData, { merge: true });
+    firestoreDb.collection('users').doc(docId).set(userData, { merge: true }).catch(err => {
+      console.warn("Firestore notice (offline/console rules):", err.message);
+    });
   } catch (e) {
-    console.warn("Firestore sync error:", e);
+    console.warn("Firestore sync skipped:", e);
   }
 }
 
@@ -1727,7 +1751,7 @@ function initFirestoreSync() {
       renderAdminUserTable();
       updateAdminStatsUI();
     }, err => {
-      console.warn("Firestore listener error:", err);
+      console.warn("Firestore listener notice:", err);
     });
   } catch (e) {}
 }
@@ -1886,7 +1910,7 @@ function getDaysRemaining(expiryStr) {
 // ĐĂNG NHẬP & CẬP NHẬT TRẠNG THÁI TÀI KHOẢN
 // --------------------------------------------------------------------------
 
-async function registerOrUpdateUser(user) {
+function registerOrUpdateUser(user) {
   const email = (user.email || '').toLowerCase().trim();
   if (!email) return;
 
@@ -1902,8 +1926,8 @@ async function registerOrUpdateUser(user) {
 
     users[email] = {
       email: email,
-      name: user.displayName || 'Người dùng',
-      photoURL: user.photoURL || '',
+      name: user.displayName || user.name || email.split('@')[0],
+      photoURL: user.photoURL || user.picture || '',
       createdAt: now.toISOString(),
       lastLogin: now.toISOString(),
       expiryDate: defaultExpiry,
@@ -1913,8 +1937,8 @@ async function registerOrUpdateUser(user) {
     };
   } else {
     users[email].lastLogin = now.toISOString();
-    if (user.displayName) users[email].name = user.displayName;
-    if (user.photoURL) users[email].photoURL = user.photoURL;
+    if (user.displayName || user.name) users[email].name = user.displayName || user.name;
+    if (user.photoURL || user.picture) users[email].photoURL = user.photoURL || user.picture;
     if (isAdmin) {
       users[email].expiryDate = 'unlimited';
       users[email].isAdmin = true;
@@ -1922,7 +1946,7 @@ async function registerOrUpdateUser(user) {
   }
 
   saveUsersDb(users);
-  await syncUserToCloud(email, users[email]);
+  syncUserToCloud(email, users[email]);
   updateCurrentUserExpiryBadge(user);
 }
 
@@ -2181,6 +2205,8 @@ function initGoogleAuth() {
   const menuUserEmail = document.getElementById('menuUserEmail');
   const btnGoogleLogout = document.getElementById('btnGoogleLogout');
   const btnOpenAdminPanel = document.getElementById('btnOpenAdminPanel');
+  const btnHeaderAdminQuick = document.getElementById('btnHeaderAdminQuick');
+  const tabAdminDirectBtn = document.getElementById('tabAdminDirectBtn');
 
   const adminPanelModal = document.getElementById('adminPanelModal');
   const btnCloseAdminPanel = document.getElementById('btnCloseAdminPanel');
@@ -2196,21 +2222,29 @@ function initGoogleAuth() {
     if (!authToast || !authToastMsg) return;
     authToastMsg.textContent = message;
     authToast.classList.remove('hidden');
+    authToast.style.display = 'flex';
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
       authToast.classList.add('hidden');
+      authToast.style.display = 'none';
     }, 4000);
   }
 
   function renderUserUI(user) {
-    if (user) {
-      if (btnGoogleLogin) btnGoogleLogin.classList.add('hidden');
-      if (userProfileBox) userProfileBox.classList.remove('hidden');
+    if (user && user.email) {
+      const email = (user.email || '').toLowerCase().trim();
+      const isAdmin = ADMIN_EMAILS.includes(email);
+      const name = user.displayName || user.name || email.split('@')[0];
+      const avatarSrc = user.photoURL || user.picture || generateAvatarDataUrl(name);
 
-      const avatarSrc = user.photoURL || user.picture || generateAvatarDataUrl(user.displayName || user.name);
-      const name = user.displayName || user.name || 'Người dùng';
-      const email = user.email || '';
-      const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
+      if (btnGoogleLogin) {
+        btnGoogleLogin.classList.add('hidden');
+        btnGoogleLogin.style.display = 'none';
+      }
+      if (userProfileBox) {
+        userProfileBox.classList.remove('hidden');
+        userProfileBox.style.display = 'block';
+      }
 
       if (userAvatarImg) userAvatarImg.src = avatarSrc;
       if (menuAvatarImg) menuAvatarImg.src = avatarSrc;
@@ -2218,22 +2252,85 @@ function initGoogleAuth() {
       if (menuUserName) menuUserName.textContent = name;
       if (menuUserEmail) menuUserEmail.textContent = email;
 
-      // Nút Admin chỉ hiển thị khi đúng email admin
       if (btnOpenAdminPanel) {
         if (isAdmin) {
           btnOpenAdminPanel.classList.remove('hidden');
+          btnOpenAdminPanel.style.display = 'flex';
         } else {
           btnOpenAdminPanel.classList.add('hidden');
+          btnOpenAdminPanel.style.display = 'none';
         }
       }
 
       updateCurrentUserExpiryBadge(user);
     } else {
-      if (btnGoogleLogin) btnGoogleLogin.classList.remove('hidden');
-      if (userProfileBox) userProfileBox.classList.add('hidden');
-      if (userMenuDropdown) userMenuDropdown.classList.add('hidden');
-      if (btnOpenAdminPanel) btnOpenAdminPanel.classList.add('hidden');
+      if (btnGoogleLogin) {
+        btnGoogleLogin.classList.remove('hidden');
+        btnGoogleLogin.style.display = 'flex';
+      }
+      if (userProfileBox) {
+        userProfileBox.classList.add('hidden');
+        userProfileBox.style.display = 'none';
+      }
+      if (userMenuDropdown) {
+        userMenuDropdown.classList.add('hidden');
+        userMenuDropdown.style.display = 'none';
+      }
+      if (btnOpenAdminPanel) {
+        btnOpenAdminPanel.classList.add('hidden');
+        btnOpenAdminPanel.style.display = 'none';
+      }
     }
+  }
+
+  // Phục hồi trạng thái đăng nhập ngay lập tức từ bộ nhớ đệm LocalStorage (không đợi mạng)
+  try {
+    const cachedRaw = localStorage.getItem('smartmix_current_user');
+    if (cachedRaw) {
+      const cached = JSON.parse(cachedRaw);
+      if (cached && cached.email) {
+        renderUserUI(cached);
+      }
+    }
+  } catch (e) {}
+
+  // Mở bảng Quản lý Email & Thời hạn (Admin Panel)
+  function openAdminModal() {
+    if (userMenuDropdown) {
+      userMenuDropdown.classList.add('hidden');
+      userMenuDropdown.style.display = 'none';
+    }
+    if (adminPanelModal) {
+      adminPanelModal.classList.remove('hidden');
+      adminPanelModal.style.display = 'flex';
+      renderAdminUserTable(inputSearchUser ? inputSearchUser.value : '');
+      updateAdminStatsUI();
+    }
+  }
+
+  function closeAdminModal() {
+    if (adminPanelModal) {
+      adminPanelModal.classList.add('hidden');
+      adminPanelModal.style.display = 'none';
+    }
+  }
+
+  if (btnHeaderAdminQuick) {
+    btnHeaderAdminQuick.addEventListener('click', openAdminModal);
+  }
+  if (tabAdminDirectBtn) {
+    tabAdminDirectBtn.addEventListener('click', openAdminModal);
+  }
+  if (btnOpenAdminPanel) {
+    btnOpenAdminPanel.addEventListener('click', openAdminModal);
+  }
+  if (btnCloseAdminPanel) {
+    btnCloseAdminPanel.addEventListener('click', closeAdminModal);
+  }
+  if (adminPanelModal) {
+    adminPanelModal.addEventListener('click', (e) => {
+      if (e.target === adminPanelModal) closeAdminModal();
+    });
   }
 
   // Khi click nút "Đăng nhập với Google"
@@ -2244,10 +2341,30 @@ function initGoogleAuth() {
         return;
       }
       firebaseAuth.signInWithPopup(googleAuthProvider)
-        .then(async (result) => {
+        .then((result) => {
           const user = result.user;
-          await registerOrUpdateUser(user);
-          showToast(`Chào mừng ${user.displayName || 'bạn'}, bạn đã đăng nhập thành công!`);
+          const userObj = {
+            displayName: user.displayName || '',
+            name: user.displayName || '',
+            email: (user.email || '').toLowerCase().trim(),
+            photoURL: user.photoURL || '',
+            picture: user.photoURL || '',
+            uid: user.uid
+          };
+
+          // 1. Cập nhật UI ngay lập tức
+          renderUserUI(userObj);
+
+          // 2. Ghi nhận tài khoản vào cơ sở dữ liệu
+          registerOrUpdateUser(userObj);
+
+          // 3. Lưu phiên đăng nhập
+          try {
+            localStorage.setItem('smartmix_current_user', JSON.stringify(userObj));
+          } catch (e) {}
+
+          // 4. Thông báo thành công
+          showToast(`Chào mừng ${userObj.displayName || userObj.email}, bạn đã đăng nhập thành công!`);
         })
         .catch((error) => {
           console.error("Lỗi đăng nhập Google:", error);
@@ -2258,18 +2375,22 @@ function initGoogleAuth() {
             showToast("Lỗi đăng nhập: " + (error.message || error.code));
           }
         });
-    });
+  });
   }
 
   // Đăng xuất
   if (btnGoogleLogout) {
     btnGoogleLogout.addEventListener('click', () => {
+      localStorage.removeItem('smartmix_current_user');
+      renderUserUI(null);
       if (firebaseAuth) {
         firebaseAuth.signOut().then(() => {
           showToast("Đã đăng xuất khỏi tài khoản.");
+        }).catch(() => {
+          showToast("Đã đăng xuất khỏi tài khoản.");
         });
       } else {
-        renderUserUI(null);
+        showToast("Đã đăng xuất khỏi tài khoản.");
       }
     });
   }
@@ -2278,39 +2399,27 @@ function initGoogleAuth() {
   if (userProfileBtn) {
     userProfileBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (userMenuDropdown) userMenuDropdown.classList.toggle('hidden');
+      if (userMenuDropdown) {
+        const isHidden = userMenuDropdown.classList.contains('hidden') || userMenuDropdown.style.display === 'none';
+        if (isHidden) {
+          userMenuDropdown.classList.remove('hidden');
+          userMenuDropdown.style.display = 'block';
+        } else {
+          userMenuDropdown.classList.add('hidden');
+          userMenuDropdown.style.display = 'none';
+        }
+      }
     });
   }
 
   document.addEventListener('click', (e) => {
     if (userProfileBox && !userProfileBox.contains(e.target)) {
-      if (userMenuDropdown) userMenuDropdown.classList.add('hidden');
+      if (userMenuDropdown) {
+        userMenuDropdown.classList.add('hidden');
+        userMenuDropdown.style.display = 'none';
+      }
     }
   });
-
-  // Mở Admin Panel
-  if (btnOpenAdminPanel) {
-    btnOpenAdminPanel.addEventListener('click', () => {
-      if (userMenuDropdown) userMenuDropdown.classList.add('hidden');
-      if (adminPanelModal) {
-        adminPanelModal.classList.remove('hidden');
-        renderAdminUserTable();
-        updateAdminStatsUI();
-      }
-    });
-  }
-
-  if (btnCloseAdminPanel) {
-    btnCloseAdminPanel.addEventListener('click', () => {
-      if (adminPanelModal) adminPanelModal.classList.add('hidden');
-    });
-  }
-
-  if (adminPanelModal) {
-    adminPanelModal.addEventListener('click', (e) => {
-      if (e.target === adminPanelModal) adminPanelModal.classList.add('hidden');
-    });
-  }
 
   // Tìm kiếm trong Admin Panel
   if (inputSearchUser) {
@@ -2344,7 +2453,7 @@ function initGoogleAuth() {
         };
         saveUsersDb(users);
         syncUserToCloud(email, users[email]);
-        renderAdminUserTable();
+        renderAdminUserTable(inputSearchUser ? inputSearchUser.value : '');
         updateAdminStatsUI();
         if (inputAddEmail) inputAddEmail.value = '';
         showToast(`Đã thêm email ${email} vào danh sách cấp phép!`);
@@ -2356,16 +2465,23 @@ function initGoogleAuth() {
 
   // Tự động lắng nghe phiên đăng nhập từ Firebase
   if (firebaseAuth) {
-    firebaseAuth.onAuthStateChanged(async (user) => {
-      if (user) {
-        await registerOrUpdateUser(user);
-        renderUserUI({
-          displayName: user.displayName,
-          email: user.email,
-          photoURL: user.photoURL,
+    firebaseAuth.onAuthStateChanged((user) => {
+      if (user && user.email) {
+        const userObj = {
+          displayName: user.displayName || '',
+          name: user.displayName || '',
+          email: user.email.toLowerCase().trim(),
+          photoURL: user.photoURL || '',
+          picture: user.photoURL || '',
           uid: user.uid
-        });
+        };
+        renderUserUI(userObj);
+        registerOrUpdateUser(userObj);
+        try {
+          localStorage.setItem('smartmix_current_user', JSON.stringify(userObj));
+        } catch (e) {}
       } else {
+        localStorage.removeItem('smartmix_current_user');
         renderUserUI(null);
       }
     });
